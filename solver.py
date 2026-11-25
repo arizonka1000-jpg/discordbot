@@ -109,6 +109,8 @@ class InstaLingSolver:
         result = {
             "success": False,
             "message": "",
+            "error_reason": "",
+            "error_tip": "",
             "total_words": 0,
             "correct_words": 0,
             "learned_words": 0,
@@ -271,6 +273,8 @@ class InstaLingSolver:
                         logged_in_already = True
                     else:
                         result["message"] = f"❌ Nie udało się załadować formularza logowania (URL: {page.url})"
+                        result["error_reason"] = "Błąd połączenia ze stroną logowania"
+                        result["error_tip"] = "Strona logowania InstaLing nie załadowała się. Serwery InstaLing mogą być przeciążone lub sieć zwolniła."
                         await browser.close()
                         return result
 
@@ -326,6 +330,8 @@ class InstaLingSolver:
                                 err_txt = await err_el.inner_text()
                                 if any(w in err_txt.lower() for w in ["niepoprawny", "błędny", "hasło", "login"]):
                                     result["message"] = f"❌ Niepoprawny login lub hasło do InstaLinga ({err_txt.strip()})"
+                                    result["error_reason"] = "Nieprawidłowy login lub hasło"
+                                    result["error_tip"] = "InstaLing odrzucił podane dane. Użyj komendy /dodaj_konto, aby podać aktualne hasło."
                                     await browser.close()
                                     return result
                         except Exception:
@@ -337,12 +343,16 @@ class InstaLingSolver:
                         content = await self.safe_get_content(page)
                         if "Niepoprawny e-mail lub hasło" in content or "Błędny login" in content:
                             result["message"] = "❌ Niepoprawny login lub hasło do InstaLinga!"
+                            result["error_reason"] = "Nieprawidłowy login lub hasło"
+                            result["error_tip"] = "InstaLing odrzucił podane dane. Użyj komendy /dodaj_konto, aby podać aktualne hasło."
                             await browser.close()
                             return result
                         elif "student" in page.url.lower():
                             login_ok = True
                         else:
                             result["message"] = f"❌ Logowanie przekroczyło limit czasu (URL: {page.url})"
+                            result["error_reason"] = "Limit czasu logowania (Timeout)"
+                            result["error_tip"] = "Strona logowania InstaLing zbyt długo nie reagowała na próbę logowania. Spróbuj za chwilę."
                             await browser.close()
                             return result
 
@@ -905,7 +915,9 @@ class InstaLingSolver:
 
                     if iterations - last_progress_iter > 60:
                         logger.error("🛑 Bot utknął na >60 iteracji bez postępu. Przerywam sesję.")
-                        result["message"] = "❌ Bot utknął — sesja przerwana (brak postępu)"
+                        result["message"] = "❌ Bot utknął — sesja przerwana (brak postępu strony)"
+                        result["error_reason"] = "Zawieszenie strony InstaLing"
+                        result["error_tip"] = "Strona InstaLing przestała odpowiadać na kliknięcia lub zablokował ją modal. Spróbuj wykonać sesję za chwilę."
                         break
 
                     await asyncio.sleep(0.5)
@@ -913,6 +925,8 @@ class InstaLingSolver:
             except Exception as e:
                 logger.error(f"Wyjątek podczas rozwiązywania sesji: {e}", exc_info=True)
                 result["message"] = f"❌ Wystąpił błąd: {str(e)}"
+                result["error_reason"] = "Nieoczekiwany wyjątek techniczny"
+                result["error_tip"] = f"Wystąpił błąd w działaniu bota: {str(e)[:120]}"
             finally:
                 result["time_seconds"] = round(time.time() - start_time, 1)
                 await browser.close()

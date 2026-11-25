@@ -367,11 +367,12 @@ async def sesja(interaction: discord.Interaction, konto: str = None, wszystkie: 
                     password=acc["password"],
                     preferred_lang=acc.get("language", "auto")
                 )
-            if r["success"]:
-                database.update_last_run(interaction.user.id, acc["login"], discord.utils.utcnow().strftime("%Y-%m-%d %H:%M:%S"))
-                up_acc = database.get_account_by_login(interaction.user.id, acc["login"])
-                if up_acc:
-                    asyncio.create_task(firebase_client.save_account_cloud(up_acc))
+            now_dt = discord.utils.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            status_str = "already_done" if r.get("already_done") else ("success" if r.get("success") else "failed")
+            database.update_last_run(interaction.user.id, acc["login"], now_dt, status=status_str)
+            up_acc = database.get_account_by_login(interaction.user.id, acc["login"])
+            if up_acc and r.get("success"):
+                asyncio.create_task(firebase_client.save_account_cloud(up_acc))
             return (acc["login"], r)
 
         batch_tasks = [run_single_in_batch(acc, i) for i, acc in enumerate(cur_batch)]
@@ -415,10 +416,18 @@ async def sesja(interaction: discord.Interaction, konto: str = None, wszystkie: 
         lang_tag = res.get("language", "EN")
         if res.get("already_done"):
             val = "ℹ️ **Dzisiejsza sesja była już wykonana!**"
-        elif res["success"]:
+        elif res.get("success"):
             val = f"✅ Poprawne: **{res['correct_words']}/{res['total_words']}** | Nowe: **+{res['learned_words']}** | Czas: `{res['time_seconds']}s`"
         else:
-            val = f"❌ {res['message']}"
+            reason = res.get("error_reason")
+            msg_txt = res.get("message", "Nieznany błąd")
+            tip = res.get("error_tip")
+            val_lines = [f"❌ **Błąd:** {msg_txt}"]
+            if reason:
+                val_lines.append(f"⚠️ **Przyczyna:** `{reason}`")
+            if tip:
+                val_lines.append(f"💡 **Co zrobić:** {tip}")
+            val = "\n".join(val_lines)
         current_embed.add_field(name=f"👤 `{acc_login}` [{lang_tag}]", value=val, inline=False)
         field_count += 1
 
@@ -461,6 +470,37 @@ async def sesja(interaction: discord.Interaction, konto: str = None, wszystkie: 
                 )
             except Exception as e_user:
                 logger.error(f"Nie udało się wysłać raportu na DM: {e_user}")
+
+    # WYSYŁANIE NA PV (DM) DO UŻYTKOWNIKA ZE SZCZEGÓŁAMI BŁĘDÓW ("czm się nie udało")
+    failed_results = [(acc_login, r) for acc_login, r in results if not r.get("success") and not r.get("already_done")]
+    if failed_results and interaction.user:
+        try:
+            dm_embed = discord.Embed(
+                title="🚨 Raport błędów z Twojej sesji InstaLing",
+                description=(
+                    f"Wykryto problem z wykonaniem sesji dla **{len(failed_results)}** kont.\n"
+                    f"Poniżej znajdziesz szczegóły dlaczego sesja się nie powiodła:"
+                ),
+                color=discord.Color.red(),
+                timestamp=datetime.now()
+            )
+            for acc_l, f_res in failed_results:
+                reason = f_res.get("error_reason") or "Błąd wykonania"
+                msg_txt = f_res.get("message") or "Wystąpił błąd podczas sesji"
+                tip = f_res.get("error_tip") or "Użyj /dodaj_konto, aby sprawdzić dane."
+                dm_embed.add_field(
+                    name=f"❌ Konto: `{acc_l}` [{f_res.get('language', 'PL')}]",
+                    value=(
+                        f"**Dlaczego się nie udało:** {msg_txt}\n"
+                        f"**Rodzaj problemu:** `{reason}`\n"
+                        f"**💡 Co możesz zrobić:** {tip}"
+                    ),
+                    inline=False
+                )
+            dm_embed.set_footer(text="InstaLing AutoBot • Powiadomienie na PV")
+            await interaction.user.send(embed=dm_embed)
+        except Exception as e_dm:
+            logger.warning(f"Nie udało się wysłać powiadomienia o błędach na PV do {interaction.user.id}: {e_dm}")
 
 @bot.tree.command(name="baza", description="Sprawdź liczbę zapamiętanych słówek w bazie Firebase")
 async def baza(interaction: discord.Interaction):

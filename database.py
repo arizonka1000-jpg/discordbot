@@ -67,9 +67,13 @@ def init_db():
             UNIQUE(discord_user_id, login)
         )
     """)
-    # Migracja dla istniejących baz: dodanie kolumny expires_at jeśli jej nie ma
+    # Migracja dla istniejących baz: dodanie kolumny expires_at i last_status jeśli ich nie ma
     try:
         c.execute("ALTER TABLE accounts ADD COLUMN expires_at TEXT")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE accounts ADD COLUMN last_status TEXT")
     except Exception:
         pass
     conn.commit()
@@ -166,13 +170,30 @@ def set_auto_daily(discord_user_id: int, login: str, enabled: bool) -> bool:
         _save_local_backup()
     return changed
 
-def update_last_run(discord_user_id: int, login: str, timestamp_str: str):
+def update_last_run(discord_user_id: int, login: str, timestamp_str: str, status: str = "success"):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("UPDATE accounts SET last_run = ? WHERE discord_user_id = ? AND login = ?", (timestamp_str, discord_user_id, login.strip()))
+    c.execute(
+        "UPDATE accounts SET last_run = ?, last_status = ? WHERE discord_user_id = ? AND login = ?",
+        (timestamp_str, status, discord_user_id, login.strip())
+    )
     conn.commit()
     conn.close()
     _save_local_backup()
+
+def is_session_done_today(acc: Dict) -> bool:
+    """Sprawdza czy konto ma już zakończoną z sukcesem dzisiejszą sesję"""
+    last_run = acc.get("last_run")
+    last_status = acc.get("last_status") or "success"
+    if not last_run or str(last_run).lower() in ("none", "null", ""):
+        return False
+    today = datetime.now().strftime("%Y-%m-%d")
+    if not str(last_run).startswith(today):
+        return False
+    # Jeśli dzisiejszy status to failed/error, to konto NIE jest ukończone (można ponowić w oknie 16-23)
+    if str(last_status).lower() in ("failed", "error"):
+        return False
+    return True
 
 async def sync_with_firebase(firebase_client) -> dict:
     """

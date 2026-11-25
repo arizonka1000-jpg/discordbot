@@ -1,9 +1,11 @@
 # Plik konfiguracyjny Bota Discord InstaLing
 
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # Token Twojego bota Discord (z Discord Developer Portal: https://discord.com/developers/applications)
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "WSTAW_TUTAJ_TOKEN_BOTA_DISCORD")
@@ -29,18 +31,22 @@ ACTION_DELAY_MAX = int(os.getenv("ACTION_DELAY_MAX", "1600"))
 NEXT_WORD_DELAY_MIN = int(os.getenv("NEXT_WORD_DELAY_MIN", "1400")) # 1.4s - 2.5s na podgląd odpowiedzi
 NEXT_WORD_DELAY_MAX = int(os.getenv("NEXT_WORD_DELAY_MAX", "2500"))
 
-# Maksymalna liczba jednocześnie otwartych przeglądarek (ochrona przed Target crashed / OOM w Dockerze)
-MAX_CONCURRENT_SESSIONS = int(os.getenv("MAX_CONCURRENT_SESSIONS", "2"))
+# Maksymalna liczba jednocześnie otwartych przeglądarek (ochrona przed Target crashed / OOM w Dockerze/Railway)
+MAX_CONCURRENT_SESSIONS = int(os.getenv("MAX_CONCURRENT_SESSIONS", "1"))
 
-# Losowe paczki kont naraz (zalecane 1-2 dla stabilności RAM i uniknięcia crashu)
+# Losowe paczki kont naraz (1 konto naraz dla 100% stabilności RAM w kontenerach chmurowych)
 BATCH_SIZE_MIN = int(os.getenv("BATCH_SIZE_MIN", "1"))          # min. kont w paczce
-BATCH_SIZE_MAX = int(os.getenv("BATCH_SIZE_MAX", "2"))          # max. kont w paczce
+BATCH_SIZE_MAX = int(os.getenv("BATCH_SIZE_MAX", "1"))          # max. kont w paczce
 BATCH_PAUSE_MIN = int(os.getenv("BATCH_PAUSE_MIN", "5"))        # min. sekund przerwy między paczkami
 BATCH_PAUSE_MAX = int(os.getenv("BATCH_PAUSE_MAX", "12"))       # max. sekund przerwy między paczkami
 
-# Domyślna godzina automatycznego wykonywania sesji (np. 7 rano)
-DEFAULT_AUTO_HOUR = int(os.getenv("DEFAULT_AUTO_HOUR", "7"))
-DEFAULT_AUTO_MINUTE = int(os.getenv("DEFAULT_AUTO_MINUTE", "0"))
+# Godziny automatycznego wykonywania sesji (w godzinach 16:00 - 23:00 codziennie)
+AUTO_WINDOW_START_HOUR = int(os.getenv("AUTO_WINDOW_START_HOUR", "16")) # Od 16:00
+AUTO_WINDOW_END_HOUR = int(os.getenv("AUTO_WINDOW_END_HOUR", "23"))     # Do 23:00
+AUTO_CRON_HOURS = os.getenv("AUTO_CRON_HOURS", "16,18,20,22")           # Godziny sprawdzania w oknie 16-23
+AUTO_CRON_MINUTE = int(os.getenv("AUTO_CRON_MINUTE", "30"))             # Minuta uruchomienia (np. 16:30, 18:30 itd.)
+DEFAULT_AUTO_HOUR = int(os.getenv("DEFAULT_AUTO_HOUR", "16"))
+DEFAULT_AUTO_MINUTE = int(os.getenv("DEFAULT_AUTO_MINUTE", "30"))
 
 # Ograniczenie uprawnień do 1 rangi
 # Możesz wpisać nazwę roli (np. "VIP", "Klient", "InstaLing") LUB jej dokładne ID z Discorda
